@@ -16,7 +16,7 @@ class Expense {
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({super.key});
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -25,6 +25,7 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   double count = 0;
   List<Expense> expenses = [];
+  int currentPageIndex = 0;
 
   void updateCount(double newCount, String category, DateTime date) {
     setState(() {
@@ -52,63 +53,91 @@ class _MyAppState extends State<MyApp> {
           style: TextStyle(color: Colors.white),
         ),
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xffbf1c42), Colors.purple, Colors.lightBlue],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+
+      body: <Widget>[
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xffbf1c42), Colors.purple, Colors.lightBlue],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
           ),
-        ),
-        child: Column(
-          children: [
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Color(0xffff023d),
-                    Color(0xFFD500F9),
-                    Color(0xFF1A237E)
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+        
+          /// Home page
+          child: Column(
+            children: [
+              Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Color(0xffff023d),
+                      Color(0xFFD500F9),
+                      Color(0xFF1A237E)
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                width: 1500,
+                height: 110,
+                margin: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(10),
+                transformAlignment: Alignment.centerLeft,
+                child: Text(
+                  'Trenutno stanje\n$count€',
+                  style: const TextStyle(fontSize: 30, color: Colors.white),
                 ),
               ),
-              width: 1500,
-              height: 110,
-              margin: const EdgeInsets.all(10),
-              padding: const EdgeInsets.all(10),
-              transformAlignment: Alignment.centerLeft,
-              child: Text(
-                'Trenutno stanje\n$count€',
-                style: const TextStyle(fontSize: 30, color: Colors.white),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: expenses.length,
+                  itemBuilder: (context, index) {
+                    final expense = expenses[index];
+                    return ListTile(
+                      title: Text(
+                        expense.category,
+                        style: const TextStyle(color: Color.fromRGBO(255, 255, 255, 1)),
+                      ),
+                      subtitle: Text(
+                        '${expense.amount}€',
+                        style: const TextStyle(color: Color.fromRGBO(255, 255, 255, 1)),
+                      ),
+                      trailing: Text(
+                        '${expense.date.day}. ${expense.date.month}. ${expense.date.year}.',
+                        style: const TextStyle(color: Color.fromRGBO(255, 255, 255, 1)),
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
-            Expanded(
-              child: ListView.builder(
-                itemCount: expenses.length,
-                itemBuilder: (context, index) {
-                  final expense = expenses[index];
-                  return ListTile(
-                    title: Text(
-                      expense.category,
-                      style: const TextStyle(color: Color.fromRGBO(255, 255, 255, 1)),
-                    ),
-                    subtitle: Text(
-                      '${expense.amount}€',
-                      style: const TextStyle(color: Color.fromRGBO(255, 255, 255, 1)),
-                    ),
-                    trailing: Text(
-                      '${expense.date.day}. ${expense.date.month}. ${expense.date.year}.',
-                      style: const TextStyle(color: Color.fromRGBO(255, 255, 255, 1)),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
+
+        /// Calendar page
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xffbf1c42), Colors.purple, Colors.lightBlue],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+
+        /// Settings page
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xffbf1c42), Colors.purple, Colors.lightBlue],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+      ][currentPageIndex],
+
       floatingActionButton: FloatingActionButton(
         child: const Icon(Icons.add),
         onPressed: () {
@@ -120,28 +149,41 @@ class _MyAppState extends State<MyApp> {
           );
         },
       ),
-      bottomNavigationBar: BottomNavigationBar(items: const [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.home_rounded),
-          label: 'Home',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.calendar_month_rounded),
-          label: 'Monthly View',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.settings),
-          label: 'Settings',
-        ),
-      ]),
+      bottomNavigationBar: NavigationBar(
+        onDestinationSelected: (int index) {
+          setState(() {
+            currentPageIndex = index;
+          });
+        },
+        indicatorColor: Colors.deepPurple[85],
+        selectedIndex: currentPageIndex,
+        destinations: const <Widget>[
+          NavigationDestination(
+            selectedIcon: Icon(Icons.home),
+            icon: Icon(Icons.home_outlined),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            selectedIcon: Icon(Icons.calendar_month),
+            icon: Icon(Icons.calendar_month_outlined),
+            label: 'Calendar View',
+          ),
+          NavigationDestination(
+            selectedIcon: Icon(Icons.settings),
+            icon: Icon(Icons.settings_outlined),
+            label: 'Settings',
+          ),
+        ],
+      ),
     );
   }
 }
 
+
 class ExpenseWidget extends StatelessWidget {
   final Expense expense;
 
-  const ExpenseWidget({Key? key, required this.expense}) : super(key: key);
+  const ExpenseWidget({super.key, required this.expense});
 
   @override
   Widget build(BuildContext context) {
@@ -161,7 +203,7 @@ class ExpenseWidget extends StatelessWidget {
 class AddMoney extends StatefulWidget {
   final Function(double, String, DateTime) updateCount;
 
-  const AddMoney({Key? key, required this.updateCount}) : super(key: key);
+  const AddMoney({super.key, required this.updateCount});
 
   @override
   State<AddMoney> createState() => _AddMoneyState();
@@ -227,11 +269,11 @@ class _AddMoneyState extends State<AddMoney> {
                   ElevatedButton(
                     onPressed: () => _selectDate(context),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.grey, 
+                      backgroundColor:Colors.grey, 
                     ),
                     child: Text(
                       selectedDate != null
-                          ? "${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}"
+                          ? "${selectedDate!.day}. ${selectedDate!.month}. ${selectedDate!.year}"
                           : 'Izaberite datum',
                     ),
                   ),
@@ -244,7 +286,7 @@ class _AddMoneyState extends State<AddMoney> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey),
+                border: Border.all(color:Colors.grey),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: DropdownMenu(
@@ -284,7 +326,7 @@ class _AddMoneyState extends State<AddMoney> {
 class MyCustomForm extends StatelessWidget {
   final TextEditingController controller;
 
-  const MyCustomForm({Key? key, required this.controller}) : super(key: key);
+  const MyCustomForm({super.key, required this.controller});
 
   @override
   Widget build(BuildContext context) {
@@ -309,7 +351,7 @@ class MyCustomForm extends StatelessWidget {
 }
 
 class Monthly extends StatelessWidget {
-  const Monthly({Key? key}) : super(key: key);
+  const Monthly({super.key});
 
   @override
   Widget build(BuildContext context) {
