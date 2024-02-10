@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:flutter_neat_and_clean_calendar/flutter_neat_and_clean_calendar.dart';
+
 
 void main() {
   runApp(const MaterialApp(
@@ -26,18 +29,51 @@ class _MyAppState extends State<MyApp> {
   double count = 0;
   List<Expense> expenses = [];
   int currentPageIndex = 0;
+  List<NeatCleanCalendarEvent> calendarEvents = [];
+
+
 
   void updateCount(double newCount, String category, DateTime date) {
     setState(() {
       count += newCount;
       expenses.add(Expense(category, newCount, date));
     });
+    void updateCount(double newCount, String category, DateTime date) {
+      setState(() {
+        count += newCount;
+        expenses.add(Expense(category, newCount, date));
+        calendarEvents.add(NeatCleanCalendarEvent(
+          '$category - ${newCount.toString()}€',
+          startTime: DateTime(date.year, date.month, date.day),
+          endTime: DateTime(date.year, date.month, date.day),
+          isAllDay: true, // Set the end time
+          color: _getColorForCategory(category), // Color code by category
+        ));
+      });
+    }
+  }
+
+  Color _getColorForCategory(String category) {
+    switch (category) {
+      case 'Namirnice':
+        return Colors.green;
+      case 'Vozilo':
+        return Colors.blue;
+      case 'Struja':
+        return Colors.orange;
+      case 'Internet':
+        return Colors.yellow;
+      case 'Posao':
+        return Colors.purple;
+      default:
+        return Colors.grey;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white,
       appBar: AppBar(
         flexibleSpace: Container(
           decoration: const BoxDecoration(
@@ -48,9 +84,11 @@ class _MyAppState extends State<MyApp> {
             ),
           ),
         ),
-        title: const Text(
-          'MoneyPal',
-          style: TextStyle(color: Colors.white),
+        title: Text(
+          currentPageIndex == 0
+        ? 'Home'
+        : (currentPageIndex == 1 ? 'Calendar View' : 'Settings'),
+          style: const TextStyle(color: Colors.white),
         ),
       ),
 
@@ -89,6 +127,7 @@ class _MyAppState extends State<MyApp> {
                   style: const TextStyle(fontSize: 30, color: Colors.white),
                 ),
               ),
+
               Expanded(
                 child: ListView.builder(
                   itemCount: expenses.length,
@@ -117,12 +156,35 @@ class _MyAppState extends State<MyApp> {
 
         /// Calendar page
         Container(
-          decoration: const BoxDecoration(
+          /*decoration: const BoxDecoration(
             gradient: LinearGradient(
               colors: [Color(0xffbf1c42), Colors.purple, Colors.lightBlue],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
+          ),*/
+          child: Calendar(
+
+            startOnMonday: true,
+            weekDays: const ['Pon', 'Uto', 'Sri', 'Čet', 'Pet', 'Sri', 'Ned'],
+            eventsList: calendarEvents, // Use the calendar events list here
+            isExpandable: true,
+            eventDoneColor: Colors.green,
+            selectedColor: Colors.pink,
+            selectedTodayColor: Colors.red,
+            todayColor: Colors.blue,
+            eventColor: null,
+            locale: 'hr_HR',
+            todayButtonText: 'Danas',
+            allDayEventText: '',
+          
+            isExpanded: true,
+            expandableDateFormat: 'EEEE, dd. MMMM yyyy',
+            datePickerType: DatePickerType.date,
+            dayOfWeekStyle: const TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.w800,
+              fontSize: 11),
           ),
         ),
 
@@ -350,8 +412,10 @@ class MyCustomForm extends StatelessWidget {
   }
 }
 
-class Monthly extends StatelessWidget {
-  const Monthly({super.key});
+class MonthlyView extends StatelessWidget {
+  final List<NeatCleanCalendarEvent> calendarEvents;
+
+  const MonthlyView({super.key, required this.calendarEvents});
 
   @override
   Widget build(BuildContext context) {
@@ -365,10 +429,39 @@ class Monthly extends StatelessWidget {
               end: Alignment.bottomRight,
             ),
           ),
+          child: const Center(
+            child: Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Text(
+                'Kalendar',
+                style: TextStyle(color: Colors.white, fontSize: 32),
+              ),
+            ),
+          ),
         ),
-        title: const Text(
-          'Monthly View',
-          style: TextStyle(color: Colors.white),
+      ),
+      body: SafeArea(
+        child: Calendar(
+          startOnMonday: true,
+          weekDays: const ['Pon', 'Uto', 'Sri', 'Čet', 'Pet', 'Sri', 'Ned'],
+          eventsList: calendarEvents, // Use the calendar events list here
+          isExpandable: true,
+          eventDoneColor: Colors.green,
+          selectedColor: Colors.pink,
+          selectedTodayColor: Colors.red,
+          todayColor: Colors.blue,
+          eventColor: null,
+          locale: 'hr_HR',
+          todayButtonText: 'Danas',
+          allDayEventText: '',
+          
+          isExpanded: true,
+          expandableDateFormat: 'EEEE, dd. MMMM yyyy',
+          datePickerType: DatePickerType.date,
+          dayOfWeekStyle: const TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.w800,
+              fontSize: 11),
         ),
       ),
     );
