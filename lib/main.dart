@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:flutter_neat_and_clean_calendar/flutter_neat_and_clean_calendar.dart';
+import 'package:pie_chart/pie_chart.dart';
 
 
 void main() {
@@ -30,27 +31,59 @@ class _MyAppState extends State<MyApp> {
   List<Expense> expenses = [];
   int currentPageIndex = 0;
   List<NeatCleanCalendarEvent> calendarEvents = [];
+  
+  List<Color> _getColorList() {
+    return List.generate(
+        dataMap.length, (index) => Colors.primaries[index % Colors.primaries.length]);
+  }
 
 
+  Map<String, double> dataMap = {
+    'Namirnice': 0,
+    'Vozilo': 0,
+    'Struja': 0,
+    'Internet': 0,
+    'Posao': 0,
+  };
+
+bool isExpense = true;
 
   void updateCount(double newCount, String category, DateTime date) {
     setState(() {
-      count += newCount;
-      expenses.add(Expense(category, newCount, date));
-    });
-    void updateCount(double newCount, String category, DateTime date) {
-      setState(() {
-        count += newCount;
-        expenses.add(Expense(category, newCount, date));
-        calendarEvents.add(NeatCleanCalendarEvent(
+      // Determine the sign of the amount based on the slider position
+    final signedAmount = isExpense ? -newCount : newCount;
+    
+    // Update the total count
+    count += signedAmount;
+
+    // Update expenses list
+    expenses.add(Expense(category, signedAmount, date));
+
+    // Update dataMap
+    // Update dataMap
+if (dataMap.containsKey(category)) {
+  if (signedAmount < 0) {
+    // Only update dataMap for expenses (negative amounts)
+    if (dataMap[category] != null) {
+      dataMap[category] = dataMap[category]! - signedAmount; // Negate the amount
+    } else {
+      dataMap[category] = -signedAmount; // Set as expense
+    }
+  }
+} else {
+  dataMap[category] = signedAmount;
+}
+
+      
+      calendarEvents.add(NeatCleanCalendarEvent(
           '$category - ${newCount.toString()}€',
           startTime: DateTime(date.year, date.month, date.day),
           endTime: DateTime(date.year, date.month, date.day),
           isAllDay: true, // Set the end time
           color: _getColorForCategory(category), // Color code by category
         ));
-      });
-    }
+    });
+    
   }
 
   Color _getColorForCategory(String category) {
@@ -129,27 +162,35 @@ class _MyAppState extends State<MyApp> {
               ),
 
               Expanded(
-                child: ListView.builder(
-                  itemCount: expenses.length,
-                  itemBuilder: (context, index) {
-                    final expense = expenses[index];
-                    return ListTile(
-                      title: Text(
-                        expense.category,
-                        style: const TextStyle(color: Color.fromRGBO(255, 255, 255, 1)),
-                      ),
-                      subtitle: Text(
-                        '${expense.amount}€',
-                        style: const TextStyle(color: Color.fromRGBO(255, 255, 255, 1)),
-                      ),
-                      trailing: Text(
-                        '${expense.date.day}. ${expense.date.month}. ${expense.date.year}.',
-                        style: const TextStyle(color: Color.fromRGBO(255, 255, 255, 1)),
-                      ),
-                    );
-                  },
-                ),
-              ),
+  child: ListView.builder(
+    itemCount: expenses.length,
+    itemBuilder: (context, index) {
+      final expense = expenses[index];
+      return Card(
+        elevation: 15,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        margin: const EdgeInsets.all(15),
+        child: ListTile(
+          title: Text(
+            expense.category,
+            style: TextStyle(color: Colors.black),
+          ),
+          subtitle: Text(
+            '${expense.amount}€',
+            style: TextStyle(color: Colors.black),
+          ),
+          trailing: Text(
+            '${expense.date.day}. ${expense.date.month}. ${expense.date.year}.',
+            style: TextStyle(color: Colors.black),
+          ),
+        ),
+      );
+    },
+  ),
+)
             ],
           ),
         ),
@@ -190,14 +231,19 @@ class _MyAppState extends State<MyApp> {
 
         /// Settings page
         Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xffbf1c42), Colors.purple, Colors.lightBlue],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+  decoration: const BoxDecoration(
+    gradient: LinearGradient(
+      colors: [Color(0xffbf1c42), Colors.purple, Colors.lightBlue],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    ),
+  ),
+  child: Center(
+            child: MyPieChart(dataMap: dataMap),
           ),
         ),
+        
+        
       ][currentPageIndex],
 
       floatingActionButton: FloatingActionButton(
@@ -231,12 +277,74 @@ class _MyAppState extends State<MyApp> {
             label: 'Calendar View',
           ),
           NavigationDestination(
-            selectedIcon: Icon(Icons.settings),
-            icon: Icon(Icons.settings_outlined),
-            label: 'Settings',
+            selectedIcon: Icon(Icons.pie_chart),
+            icon: Icon(Icons.pie_chart_outline_outlined),
+            label: 'Graf',
           ),
         ],
       ),
+    );
+  }
+}
+
+
+class MyPieChart extends StatelessWidget {
+  final Map<String, double> dataMap;
+
+  const MyPieChart({Key? key, required this.dataMap}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: MediaQuery.of(context).size.width * 0.8, // 80% of screen width
+      height: MediaQuery.of(context).size.width * 0.8, // 80% of screen width
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.5),
+            spreadRadius: 2,
+            blurRadius: 5,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: PieChart(
+          dataMap: dataMap,
+          animationDuration: const Duration(milliseconds: 800),
+          chartLegendSpacing: 32,
+          chartRadius: MediaQuery.of(context).size.width / 3.2,
+          colorList: _getColorList(),
+          initialAngleInDegree: 0,
+          chartType: ChartType.ring,
+          ringStrokeWidth: 32,
+          legendOptions: const LegendOptions(
+            showLegendsInRow: true,
+            legendPosition: LegendPosition.bottom,
+            showLegends: true,
+            legendTextStyle: TextStyle(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          chartValuesOptions: const ChartValuesOptions(
+            showChartValueBackground: false,
+            showChartValuesInPercentage: true,
+            showChartValues: true,
+            showChartValuesOutside: false,
+            decimalPlaces: 1,
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Color> _getColorList() {
+    return List.generate(
+      dataMap.length,
+      (index) => Colors.primaries[index % Colors.primaries.length],
     );
   }
 }
@@ -275,6 +383,7 @@ class _AddMoneyState extends State<AddMoney> {
   TextEditingController controller = TextEditingController();
   String selectedCategory = '';
   DateTime? selectedDate;
+   bool isExpense = true;
 
   void _selectDate(BuildContext context) async {
     final DateTime? pickedDate = await showDatePicker(
@@ -369,6 +478,18 @@ class _AddMoneyState extends State<AddMoney> {
               ),
             ),
           ),
+          ListTile(
+            title: Text('Choose type:'),
+            trailing: Switch(
+              value: isExpense,
+              onChanged: (value) {
+                setState(() {
+                  isExpense = value;
+                });
+              },
+            ),
+            subtitle: isExpense ? Text('Dobit') : Text('Trošak'),
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -377,7 +498,9 @@ class _AddMoneyState extends State<AddMoney> {
           Navigator.pop(context);
           if (controller.text.isNotEmpty) {
             final newCount = double.parse(controller.text);
-            widget.updateCount(newCount, selectedCategory, selectedDate!);
+            // Determine the sign of the amount based on the selected option
+            final signedAmount = isExpense ? -newCount : newCount;
+            widget.updateCount(signedAmount, selectedCategory, selectedDate!);
           }
         },
       ),
@@ -467,3 +590,4 @@ class MonthlyView extends StatelessWidget {
     );
   }
 }
+
