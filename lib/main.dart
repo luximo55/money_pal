@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:flutter_neat_and_clean_calendar/flutter_neat_and_clean_calendar.dart';
 import 'package:pie_chart/pie_chart.dart';
+import 'package:path_provider/path_provider.dart';
 
 
 void main() {
@@ -32,10 +33,6 @@ class _MyAppState extends State<MyApp> {
   int currentPageIndex = 0;
   List<NeatCleanCalendarEvent> calendarEvents = [];
   
-  List<Color> _getColorList() {
-    return List.generate(
-        dataMap.length, (index) => Colors.primaries[index % Colors.primaries.length]);
-  }
 
 
   Map<String, double> dataMap = {
@@ -73,10 +70,8 @@ if (dataMap.containsKey(category)) {
 } else {
   dataMap[category] = signedAmount;
 }
-
-      
       calendarEvents.add(NeatCleanCalendarEvent(
-          '$category - ${newCount.toString()}€',
+          '$category - ${-newCount}€',
           startTime: DateTime(date.year, date.month, date.day),
           endTime: DateTime(date.year, date.month, date.day),
           isAllDay: true, // Set the end time
@@ -120,7 +115,7 @@ if (dataMap.containsKey(category)) {
         title: Text(
           currentPageIndex == 0
         ? 'Home'
-        : (currentPageIndex == 1 ? 'Calendar View' : 'Settings'),
+        : (currentPageIndex == 1 ? 'Calendar View' : 'Chart'),
           style: const TextStyle(color: Colors.white),
         ),
       ),
@@ -162,35 +157,35 @@ if (dataMap.containsKey(category)) {
               ),
 
               Expanded(
-  child: ListView.builder(
-    itemCount: expenses.length,
-    itemBuilder: (context, index) {
-      final expense = expenses[index];
-      return Card(
-        elevation: 15,
-        color: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-        margin: const EdgeInsets.all(15),
-        child: ListTile(
-          title: Text(
-            expense.category,
-            style: TextStyle(color: Colors.black),
-          ),
-          subtitle: Text(
-            '${expense.amount}€',
-            style: TextStyle(color: Colors.black),
-          ),
-          trailing: Text(
-            '${expense.date.day}. ${expense.date.month}. ${expense.date.year}.',
-            style: TextStyle(color: Colors.black),
-          ),
-        ),
-      );
-    },
-  ),
-)
+                child: ListView.builder(
+                  itemCount: expenses.length,
+                  itemBuilder: (context, index) {
+                    final expense = expenses[index];
+                    return Card(
+                      elevation: 15,
+                      color: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      margin: const EdgeInsets.all(15),
+                      child: ListTile(
+                        title: Text(
+                          expense.category,
+                          style: const TextStyle(color: Colors.black),
+                        ),
+                        subtitle: Text(
+                          '${expense.amount}€',
+                          style: const TextStyle(color: Colors.black),
+                        ),
+                        trailing: Text(
+                          '${expense.date.day}. ${expense.date.month}. ${expense.date.year}.',
+                          style: const TextStyle(color: Colors.black),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              )
             ],
           ),
         ),
@@ -225,20 +220,21 @@ if (dataMap.containsKey(category)) {
             dayOfWeekStyle: const TextStyle(
               color: Colors.black,
               fontWeight: FontWeight.w800,
-              fontSize: 11),
+              fontSize: 10
+            ),
           ),
         ),
 
         /// Settings page
         Container(
-  decoration: const BoxDecoration(
-    gradient: LinearGradient(
-      colors: [Color(0xffbf1c42), Colors.purple, Colors.lightBlue],
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-    ),
-  ),
-  child: Center(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xffbf1c42), Colors.purple, Colors.lightBlue],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Center(
             child: MyPieChart(dataMap: dataMap),
           ),
         ),
@@ -278,8 +274,8 @@ if (dataMap.containsKey(category)) {
           ),
           NavigationDestination(
             selectedIcon: Icon(Icons.pie_chart),
-            icon: Icon(Icons.pie_chart_outline_outlined),
-            label: 'Graf',
+            icon: Icon(Icons.pie_chart_outline),
+            label: 'Chart',
           ),
         ],
       ),
@@ -291,7 +287,7 @@ if (dataMap.containsKey(category)) {
 class MyPieChart extends StatelessWidget {
   final Map<String, double> dataMap;
 
-  const MyPieChart({Key? key, required this.dataMap}) : super(key: key);
+  const MyPieChart({super.key, required this.dataMap});
 
   @override
   Widget build(BuildContext context) {
@@ -383,14 +379,14 @@ class _AddMoneyState extends State<AddMoney> {
   TextEditingController controller = TextEditingController();
   String selectedCategory = '';
   DateTime? selectedDate;
-   bool isExpense = true;
+  bool isExpense = true;
 
   void _selectDate(BuildContext context) async {
     final DateTime? pickedDate = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2101),
+      firstDate: DateTime(1900),
+      lastDate: DateTime(2201),
     );
 
     if (pickedDate != null && pickedDate != selectedDate) {
@@ -479,7 +475,7 @@ class _AddMoneyState extends State<AddMoney> {
             ),
           ),
           ListTile(
-            title: Text('Choose type:'),
+            title: const Text('Izaberi tip:'),
             trailing: Switch(
               value: isExpense,
               onChanged: (value) {
@@ -488,7 +484,7 @@ class _AddMoneyState extends State<AddMoney> {
                 });
               },
             ),
-            subtitle: isExpense ? Text('Dobit') : Text('Trošak'),
+            subtitle: isExpense ? const Text('Prihod') : const Text('Trošak'),
           ),
         ],
       ),
@@ -505,6 +501,7 @@ class _AddMoneyState extends State<AddMoney> {
         },
       ),
     );
+    
   }
 }
 
@@ -584,10 +581,46 @@ class MonthlyView extends StatelessWidget {
           dayOfWeekStyle: const TextStyle(
               color: Colors.black,
               fontWeight: FontWeight.w800,
-              fontSize: 11),
+              fontSize: 10),
         ),
       ),
     );
+  }
+}
+
+class CounterStorage extends _AddMoneyState {
+  Future<String> get _localPath async {
+    final directory = await getApplicationDocumentsDirectory();
+
+    return directory.path;
+  }
+  
+
+  Future<File> get _localFile async {
+    final path = await _localPath;
+    return File('$path/$selectedDate.txt');
+  }
+  
+  
+  Future<int> readCounter() async {
+    try {
+      final file = await _localFile;
+
+      // Read the file
+      final contents = await file.readAsString();
+
+      return int.parse(contents);
+    } catch (e) {
+      // If encountering an error, return 0
+      return 0;
+    }
+  }
+
+  Future<File> writeCounter(int counter) async {
+    final file = await _localFile;
+
+    // Write the file
+    return file.writeAsString('$counter');
   }
 }
 
