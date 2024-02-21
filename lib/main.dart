@@ -1,15 +1,105 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter_neat_and_clean_calendar/flutter_neat_and_clean_calendar.dart';
 import 'package:pie_chart/pie_chart.dart';
 import 'package:path_provider/path_provider.dart';
 
 
 void main() {
-  runApp(const MaterialApp(
+  runApp(MaterialApp(
     title: 'Money Pal',
-    home: MyApp(),
+    home: MyApp(storage: CounterStorage()),
   ));
+}
+
+class CounterStorage {
+  void setState(Null Function() param0) {}
+
+  Future<String> createFolder() async {
+    // Get the documents directory using path_provider
+    Directory documentsDirectory = await getApplicationDocumentsDirectory();
+
+    // Create a new folder named "money_pal" within the documents directory
+    Directory folder = Directory('${documentsDirectory.path}/money_pal');
+    if (!(await folder.exists())) {
+      await folder.create(recursive: true);
+    }
+
+    // Return the path of the created folder
+    return folder.path;
+  }
+
+  int fileNum = 0;
+
+Future<File> get _fileTracker async {
+  try {
+    String folderPath = await createFolder();
+    File trackerFile = File('$folderPath/tracker.txt');
+    
+    // Read the file
+    String contents = await trackerFile.readAsString();
+
+    // Parse the contents to get the current fileNum value
+    int currentFileNum = int.parse(contents);
+
+    // Replace the existing value with the current fileNum
+    fileNum = currentFileNum;
+
+    // Write the updated fileNum back to the file
+    await trackerFile.writeAsString(fileNum.toString());
+
+    return trackerFile;
+  } catch (e) {
+    // If encountering an error, return a new file with the current fileNum
+    return _createTrackerFile();
+  }
+}
+
+Future<File> _createTrackerFile() async {
+  String folderPath = await createFolder();
+  File trackerFile = File('$folderPath/tracker.txt');
+  await trackerFile.writeAsString(fileNum.toString());
+  return trackerFile;
+}
+
+
+  Future<File> get _localFile async {
+    String folderPath = await createFolder();
+    int number = await readCounter();
+    
+    return File('$folderPath/Tra$number.txt');
+  }
+
+  Future<int> readCounter() async {
+    try {
+      final fileTracker = await _fileTracker;
+
+      // Read the file
+      final contents = await fileTracker.readAsString();
+
+      return int.parse(contents);
+    } catch (e) {
+      // If encountering an error, return 0
+      return 0;
+    }
+  } 
+
+  Future<File> writeCounter(double newCount, String category, DateTime date) async {
+    final file = await _localFile;
+    writeFileNum();
+    return file.writeAsString('$newCount\n$category\n$date');
+  }
+
+  Future<File> writeFileNum() async {
+    final fileTrack = await _fileTracker;
+    fileNum++;
+    // Write the file
+    return fileTrack.writeAsString(fileNum.toString());
+  }
+  
+
 }
 
 class Expense {
@@ -21,8 +111,10 @@ class Expense {
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, required this.storage});
 
+  final CounterStorage storage;
+  
   @override
   State<MyApp> createState() => _MyAppState();
 }
@@ -32,8 +124,8 @@ class _MyAppState extends State<MyApp> {
   List<Expense> expenses = [];
   int currentPageIndex = 0;
   List<NeatCleanCalendarEvent> calendarEvents = [];
+ 
   
-
 
   Map<String, double> dataMap = {
     'Namirnice': 0,
@@ -53,6 +145,7 @@ bool isExpense = true;
     // Update the total count
     count += signedAmount;
 
+    widget.storage.writeCounter(-newCount, category, date);
     // Update expenses list
     expenses.add(Expense(category, signedAmount, date));
 
@@ -585,42 +678,6 @@ class MonthlyView extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class CounterStorage extends _AddMoneyState {
-  Future<String> get _localPath async {
-    final directory = await getApplicationDocumentsDirectory();
-
-    return directory.path;
-  }
-  
-
-  Future<File> get _localFile async {
-    final path = await _localPath;
-    return File('$path/$selectedDate.txt');
-  }
-  
-  
-  Future<int> readCounter() async {
-    try {
-      final file = await _localFile;
-
-      // Read the file
-      final contents = await file.readAsString();
-
-      return int.parse(contents);
-    } catch (e) {
-      // If encountering an error, return 0
-      return 0;
-    }
-  }
-
-  Future<File> writeCounter(int counter) async {
-    final file = await _localFile;
-
-    // Write the file
-    return file.writeAsString('$counter');
   }
 }
 
