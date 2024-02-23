@@ -20,7 +20,6 @@ class CounterStorage {
   Future<String> createFolder() async {
     // Get the documents directory using path_provider
     Directory documentsDirectory = await getApplicationDocumentsDirectory();
-
     // Create a new folder named "money_pal" within the documents directory
     Directory folder = Directory('${documentsDirectory.path}/money_pal');
     if (!(await folder.exists())) {
@@ -36,7 +35,7 @@ class CounterStorage {
 Future<File> get _fileTracker async {
   try {
     String folderPath = await createFolder();
-    File trackerFile = File('$folderPath/tracker.txt');
+    File trackerFile = File('$folderPath/tracker.txt'); 
     
     // Read the file
     String contents = await trackerFile.readAsString();
@@ -57,6 +56,19 @@ Future<File> get _fileTracker async {
   }
 }
 
+  Future<List<String>> readTra(int number) async {
+    try {
+      String folderPath = await createFolder();
+      File file = File('$folderPath/Tra$number.txt');
+      List<String> lines = await file.readAsLines();
+      return lines;
+    } catch (e) {
+      print("Error reading file: $e");
+      return [];
+    }
+  }
+
+
 Future<File> _createTrackerFile() async {
   String folderPath = await createFolder();
   File trackerFile = File('$folderPath/tracker.txt');
@@ -72,11 +84,15 @@ Future<File> _createTrackerFile() async {
     return File('$folderPath/Tra$number.txt');
   }
 
+  Future<File> get _totalFile async {
+    String folderPath = await createFolder();
+
+    return File('$folderPath/Total.txt');
+  }
+
   Future<int> readCounter() async {
     try {
       final fileTracker = await _fileTracker;
-
-      // Read the file
       final contents = await fileTracker.readAsString();
 
       return int.parse(contents);
@@ -84,12 +100,30 @@ Future<File> _createTrackerFile() async {
       // If encountering an error, return 0
       return 0;
     }
-  } 
+  }
+  Future<double> readTotal() async {
+    try {
+      final totalFile = await _totalFile;
+      final contents = await totalFile.readAsString();
+
+      print(contents);
+      return double.parse(contents);
+    } catch (e) {
+      // If encountering an error, return 0
+      return 0;
+    }
+  }
 
   Future<File> writeCounter(double newCount, String category, DateTime date) async {
     final file = await _localFile;
     writeFileNum();
     return file.writeAsString('$newCount\n$category\n$date');
+  }
+
+  Future<File> writeTotal(double count) async {
+    final file = await _totalFile;
+
+    return file.writeAsString('$count');
   }
 
   Future<File> writeFileNum() async {
@@ -124,9 +158,6 @@ class _MyAppState extends State<MyApp> {
   List<Expense> expenses = [];
   int currentPageIndex = 0;
   List<NeatCleanCalendarEvent> calendarEvents = [];
- 
-  
-
   Map<String, double> dataMap = {
     'Namirnice': 0,
     'Vozilo': 0,
@@ -134,44 +165,73 @@ class _MyAppState extends State<MyApp> {
     'Internet': 0,
     'Posao': 0,
   };
+  bool isExpense = true;
 
-bool isExpense = true;
-
-  void updateCount(double newCount, String category, DateTime date) {
+  void updateCount(double newCount, String category, DateTime date) async {
     setState(() {
-      // Determine the sign of the amount based on the slider position
-    final signedAmount = isExpense ? -newCount : newCount;
-    
-    // Update the total count
-    count += signedAmount;
-
-    widget.storage.writeCounter(-newCount, category, date);
-    // Update expenses list
-    expenses.add(Expense(category, signedAmount, date));
-
-    // Update dataMap
-    // Update dataMap
-if (dataMap.containsKey(category)) {
-  if (signedAmount < 0) {
-    // Only update dataMap for expenses (negative amounts)
-    if (dataMap[category] != null) {
-      dataMap[category] = dataMap[category]! - signedAmount; // Negate the amount
-    } else {
-      dataMap[category] = -signedAmount; // Set as expense
-    }
-  }
-} else {
-  dataMap[category] = signedAmount;
-}
+      final signedAmount = isExpense ? -newCount : newCount;
+      count += signedAmount;
+      widget.storage.writeTotal(count);
+      widget.storage.writeCounter(-newCount, category, date);
+      // Update expenses list
+      expenses.add(Expense(category, signedAmount, date));
+        
+      // Update dataMap
+      if (dataMap.containsKey(category)) {
+        if (signedAmount < 0) {
+          // Only update dataMap for expenses (negative amounts)
+          if (dataMap[category] != null) {
+            dataMap[category] = dataMap[category]! - signedAmount; // Negate the amount
+          } else {
+            dataMap[category] = -signedAmount; // Set as expense
+          }
+        }
+      } else {
+        dataMap[category] = signedAmount;
+      }
       calendarEvents.add(NeatCleanCalendarEvent(
-          '$category - ${-newCount}€',
-          startTime: DateTime(date.year, date.month, date.day),
-          endTime: DateTime(date.year, date.month, date.day),
-          isAllDay: true, // Set the end time
-          color: _getColorForCategory(category), // Color code by category
-        ));
-    });
-    
+        '$category - ${-newCount}€',
+        startTime: DateTime(date.year, date.month, date.day),
+        endTime: DateTime(date.year, date.month, date.day),
+        isAllDay: true, // Set the end time
+        color: _getColorForCategory(category), // Color code by category
+      ));
+    });    
+  }
+  
+  Future<void> loadData() async {
+    int fileNum = await widget.storage.readCounter();
+    late double amount;
+    late String category;
+    late DateTime date;
+    for(int i = 0; i < fileNum; i++)
+    {
+      print('the transaction no. is $i');
+      final traFile = await widget.storage.readTra(i);
+      List<String> lines = await widget.storage.readTra(i);
+      if(lines.isNotEmpty){
+        for(int x = 0; x < 3; x++)
+        {
+          print('the line is $x');
+          print(lines[x]);
+          if(x == 0){
+            amount = double.parse(lines[x]);
+          } else if(x == 1){
+            category = lines[x];
+          } else if(x == 2){
+            date = DateTime.parse(lines[x]);
+          }
+          
+        }
+        print('This is double bitches $amount');
+        print('This is String bitches $category');
+        print('This is DateTime bitches $date');
+        setState(() {
+          expenses.add(Expense(category, amount, date));
+        });
+        
+      }
+    }
   }
 
   Color _getColorForCategory(String category) {
@@ -193,6 +253,15 @@ if (dataMap.containsKey(category)) {
 
   @override
   Widget build(BuildContext context) {
+    if(count == 0)
+    {
+      widget.storage.readTotal().then((double temp) {
+        setState(() {
+          count = temp;
+        });
+      });
+      loadData();
+    }
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -446,6 +515,7 @@ class ExpenseWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    print('Im  here in the Expenses');
     return Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
