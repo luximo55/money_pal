@@ -206,14 +206,14 @@ class _MyAppState extends State<MyApp> {
     late DateTime date;
     for(int i = 0; i < fileNum; i++)
     {
-      print('the transaction no. is $i');
+      //print('the transaction no. is $i');
       final traFile = await widget.storage.readTra(i);
       List<String> lines = await widget.storage.readTra(i);
       if(lines.isNotEmpty){
         for(int x = 0; x < 3; x++)
         {
-          print('the line is $x');
-          print(lines[x]);
+          //print('the line is $x');
+          //print(lines[x]);
           if(x == 0){
             amount = double.parse(lines[x]);
           } else if(x == 1){
@@ -223,13 +223,31 @@ class _MyAppState extends State<MyApp> {
           }
           
         }
-        print('This is double bitches $amount');
+        /*print('This is double bitches $amount');
         print('This is String bitches $category');
         print('This is DateTime bitches $date');
-        setState(() {
+        */setState(() {
           expenses.add(Expense(category, amount, date));
-        });
-        
+          calendarEvents.add(NeatCleanCalendarEvent(
+            '$category - ${amount}€',
+            startTime: DateTime(date.year, date.month, date.day),
+            endTime: DateTime(date.year, date.month, date.day),
+            isAllDay: true, // Set the end time
+            color: _getColorForCategory(category), // Color code by category
+          ));
+          if (dataMap.containsKey(category)) {
+            if (amount < 0) {
+              // Only update dataMap for expenses (negative amounts)
+              if (dataMap[category] != null) {
+                dataMap[category] = dataMap[category]! - amount; // Negate the amount
+              } else {
+                dataMap[category] = -amount; // Set as expense
+              }
+            }
+          } else {
+            dataMap[category] = amount;
+          }
+        });    
       }
     }
   }
@@ -387,7 +405,7 @@ class _MyAppState extends State<MyApp> {
           ),
         ),
 
-        /// Settings page
+        // Chart page
         Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
@@ -515,7 +533,6 @@ class ExpenseWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    print('Im  here in the Expenses');
     return Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
