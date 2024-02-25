@@ -13,7 +13,7 @@ import 'package:money_pal/main.dart';
 void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(MyApp(storage: CounterStorage()));
+    await tester.pumpWidget(MyApp(storage: CounterStorage(), startingAmount: 0, currency: '€') );
 
     // Verify that our counter starts at 0.
     expect(find.text('0'), findsOneWidget);

@@ -1,22 +1,43 @@
-import 'package:flutter/foundation.dart';
+ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter_neat_and_clean_calendar/flutter_neat_and_clean_calendar.dart';
 import 'package:pie_chart/pie_chart.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
 
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  
+  bool welcomeScreenSeen = prefs.getBool('welcomeScreenSeen') ?? false;
+  CounterStorage storage = CounterStorage(); // Initialize CounterStorage
+  await storage.createFolder(); // Ensure folder creation
 
-void main() {
+  double startingAmount = prefs.getDouble('startingAmount') ?? 0.0;
+  String currency = prefs.getString('_selectedCurrency') ?? '€';
+
   runApp(MaterialApp(
     title: 'Money Pal',
-    home: MyApp(storage: CounterStorage()),
+    theme: ThemeData.light(), 
+    home: welcomeScreenSeen ? MyApp(storage: storage, startingAmount: startingAmount,  currency: currency,) : WelcomeScreen(),
   ));
 }
+
 
 class CounterStorage {
   void setState(Null Function() param0) {}
 
+
+  Future<void> deleteTransaction(String id) async {
+  String folderPath = await createFolder();
+  File file = File('$folderPath/Tra$id.txt');
+  if (await file.exists()) {
+    await file.delete();
+  }
+}
   Future<String> createFolder() async {
     // Get the documents directory using path_provider
     Directory documentsDirectory = await getApplicationDocumentsDirectory();
@@ -114,10 +135,10 @@ Future<File> _createTrackerFile() async {
     }
   }
 
-  Future<File> writeCounter(double newCount, String category, DateTime date) async {
+  Future<File> writeCounter(double newCount, String category, DateTime date, String id) async {
     final file = await _localFile;
     writeFileNum();
-    return file.writeAsString('$newCount\n$category\n$date');
+    return file.writeAsString('$newCount\n$category\n$date\n$id');
   }
 
   Future<File> writeTotal(double count) async {
@@ -137,16 +158,18 @@ Future<File> _createTrackerFile() async {
 }
 
 class Expense {
+  final String id;
   final String category;
   final double amount;
   final DateTime date;
 
-  Expense(this.category, this.amount, this.date);
+  Expense(this.id, this.category, this.amount, this.date);
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key, required this.storage});
-
+  const MyApp({Key? key, required this.storage, required this.startingAmount, required this.currency}) : super(key: key);
+  final double startingAmount;
+  final String currency;
   final CounterStorage storage;
   
   @override
@@ -154,103 +177,223 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  double count = 0;
-  List<Expense> expenses = [];
+  double totalCount = 0;
+
+  bool isDarkModeEnabled = false; // Track dark mode state
+
+  List<Expense> transactions = [];
+
+  Map<String, double> dataMap = {};
+
+  
   int currentPageIndex = 0;
   List<NeatCleanCalendarEvent> calendarEvents = [];
-  Map<String, double> dataMap = {
+
+  List<DropdownMenuItem<String>> dropdownMenuEntries = [
+    DropdownMenuItem(value: 'Namirnice', child: Text('Namirnice')),
+    DropdownMenuItem(value: 'Vozilo', child: Text('Vozilo')),
+    DropdownMenuItem(value: 'Struja', child: Text('Struja')),
+    DropdownMenuItem(value: 'Internet', child: Text('Internet')),
+    DropdownMenuItem(value: 'Posao', child: Text('Posao')),
+  ];
+  
+
+  bool isExpense = true;
+
+
+  @override
+  void initState() {
+    super.initState();
+    dataMap = {
+      'Namirnice': 0,
+      'Vozilo': 0,
+      'Struja': 0,
+      'Internet': 0,
+      'Posao': 0,
+    };
+    dropdownMenuEntries = dataMap.keys.map((String value) {
+      return DropdownMenuItem<String>(
+        value: value,
+        child: Text(value),
+      );
+    }).toList();
+    _checkIfWelcomeScreenSeen(); // Check if the welcome screen has been seen
+
+    totalCount = widget.startingAmount;
+
+    
+
+    loadData();
+  }
+
+  void updateCount(double newCount, String category, DateTime date, bool isExpense) async {
+  final signedAmount = isExpense ? -newCount : newCount; // Ensure correct sign
+  String id = DateTime.now().millisecondsSinceEpoch.toString();
+
+
+  // Perform file operations before calling setState
+  await widget.storage.writeTotal(totalCount + signedAmount);
+  await widget.storage.writeCounter(signedAmount, category, date, id);
+
+  setState(() {
+    totalCount += signedAmount;
+    transactions.add(Expense(id,category, signedAmount, date));
+        
+    // Update dataMap for pie chart
+    if (dataMap.containsKey(category)) {
+      dataMap[category] = (dataMap[category] ?? 0) + signedAmount;
+    } else {
+      dataMap[category] = signedAmount;
+    }
+
+    // Assuming calendarEvents is correctly managed elsewhere for UI updates
+    calendarEvents.add(NeatCleanCalendarEvent(
+      '$category - ${newCount.toString()}${widget.currency}',
+      startTime: DateTime(date.year, date.month, date.day),
+      endTime: DateTime(date.year, date.month, date.day),
+      isAllDay: true, // Indicate all-day event
+      color: _getColorForCategory(category), // Assign color based on category
+    ));
+  });
+}
+
+void deleteTransaction(String id) async {
+  int index = transactions.indexWhere((transaction) => transaction.id == id);
+  if (index != -1) {
+    Expense transactionToDelete = transactions[index];
+
+    // Adjust the totalCount and update the total amount file
+    totalCount -= transactionToDelete.amount;
+    await widget.storage.writeTotal(totalCount);
+
+    // Remove the transaction from the local storage
+    await widget.storage.deleteTransaction(id);
+
+    // Remove the transaction from the list
+    transactions.removeAt(index);
+
+    // Recalculate the dataMap amounts without removing categories
+    recalculateDataMapAfterDeletion();
+
+    // Rebuild calendar events
+    rebuildCalendarEvents();
+
+    // Update UI
+    setState(() {});
+  }
+}
+
+
+void recalculateDataMapAfterDeletion() {
+  // Reset amounts to 0 for all categories
+  Map<String, double> tempDataMap = Map.fromIterable(dataMap.keys, key: (k) => k, value: (v) => 0.0);
+
+  // Recalculate amounts based on remaining transactions
+  for (var transaction in transactions) {
+    tempDataMap[transaction.category] = (tempDataMap[transaction.category] ?? 0) + transaction.amount;
+  }
+
+  // Update the dataMap
+  dataMap = tempDataMap;
+}
+
+
+void rebuildCalendarEvents() {
+  List<NeatCleanCalendarEvent> updatedEvents = [];
+
+  for (var transaction in transactions) {
+    updatedEvents.add(NeatCleanCalendarEvent(
+      '${transaction.category} - ${transaction.amount.toString()}${widget.currency}',
+      startTime: transaction.date,
+      endTime: transaction.date, // Adjust as necessary
+      isAllDay: true,
+      color: _getColorForCategory(transaction.category),
+    ));
+  }
+
+  setState(() {
+    calendarEvents = updatedEvents;
+  });
+}
+
+  //dodavanje kategorija
+  void addCategory(String newCategory) {
+    setState(() {
+      dataMap[newCategory] = 0;
+      // Update dropdown menu entries with the new category
+      dropdownMenuEntries.add(DropdownMenuItem(value: newCategory, child: Text(newCategory)));
+    });
+  }
+
+  Future<void> _checkIfWelcomeScreenSeen() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    bool welcomeScreenSeen = prefs.getBool('welcomeScreenSeen') ?? false;
+    if (!welcomeScreenSeen) {
+      await prefs.setBool('welcomeScreenSeen', true);
+    }
+  }
+
+   
+
+
+ 
+  
+
+  
+   Future<void> loadData() async {
+  int fileNum = await widget.storage.readCounter();
+  // Initialize variables outside the loop to ensure they are not late-initialized
+  double amount;
+  String category;
+  DateTime date;
+
+  // Temporary storage to update the pie chart dataMap correctly
+  Map<String, double> tempDataMap = {
     'Namirnice': 0,
     'Vozilo': 0,
     'Struja': 0,
     'Internet': 0,
     'Posao': 0,
   };
-  bool isExpense = true;
 
-  void updateCount(double newCount, String category, DateTime date) async {
-    setState(() {
-      final signedAmount = isExpense ? -newCount : newCount;
-      count += signedAmount;
-      widget.storage.writeTotal(count);
-      widget.storage.writeCounter(-newCount, category, date);
-      // Update expenses list
-      expenses.add(Expense(category, signedAmount, date));
-        
-      // Update dataMap
-      if (dataMap.containsKey(category)) {
-        if (signedAmount < 0) {
-          // Only update dataMap for expenses (negative amounts)
-          if (dataMap[category] != null) {
-            dataMap[category] = dataMap[category]! - signedAmount; // Negate the amount
-          } else {
-            dataMap[category] = -signedAmount; // Set as expense
-          }
-        }
-      } else {
-        dataMap[category] = signedAmount;
+  for(int i = 0; i < fileNum; i++) {
+    final List<String> lines = await widget.storage.readTra(i);
+    if (lines.isNotEmpty && lines.length >= 3) {
+      // Parse each transaction line by line
+      amount = double.parse(lines[0]);
+      category = lines[1];
+      date = DateTime.parse(lines[2]);
+      String id = lines[3];
+
+      // Add transaction to the transactions list
+      transactions.add(Expense(id, category, amount, date));
+      
+      // Only consider negative amounts for expenses in dataMap
+      if (amount < 0) {
+        tempDataMap[category] = (tempDataMap[category] ?? 0) + amount; // Deduct the amount for expenses
       }
+
+      // Add event to the calendar for each transaction
       calendarEvents.add(NeatCleanCalendarEvent(
-        '$category - ${-newCount}€',
+        '$category - ${amount}€',
         startTime: DateTime(date.year, date.month, date.day),
         endTime: DateTime(date.year, date.month, date.day),
-        isAllDay: true, // Set the end time
-        color: _getColorForCategory(category), // Color code by category
+        isAllDay: true,
+        color: _getColorForCategory(category),
       ));
-    });    
-  }
-  
-  Future<void> loadData() async {
-    int fileNum = await widget.storage.readCounter();
-    late double amount;
-    late String category;
-    late DateTime date;
-    for(int i = 0; i < fileNum; i++)
-    {
-      //print('the transaction no. is $i');
-      final traFile = await widget.storage.readTra(i);
-      List<String> lines = await widget.storage.readTra(i);
-      if(lines.isNotEmpty){
-        for(int x = 0; x < 3; x++)
-        {
-          //print('the line is $x');
-          //print(lines[x]);
-          if(x == 0){
-            amount = double.parse(lines[x]);
-          } else if(x == 1){
-            category = lines[x];
-          } else if(x == 2){
-            date = DateTime.parse(lines[x]);
-          }
-          
-        }
-        /*print('This is double bitches $amount');
-        print('This is String bitches $category');
-        print('This is DateTime bitches $date');
-        */setState(() {
-          expenses.add(Expense(category, amount, date));
-          calendarEvents.add(NeatCleanCalendarEvent(
-            '$category - ${amount}€',
-            startTime: DateTime(date.year, date.month, date.day),
-            endTime: DateTime(date.year, date.month, date.day),
-            isAllDay: true, // Set the end time
-            color: _getColorForCategory(category), // Color code by category
-          ));
-          if (dataMap.containsKey(category)) {
-            if (amount < 0) {
-              // Only update dataMap for expenses (negative amounts)
-              if (dataMap[category] != null) {
-                dataMap[category] = dataMap[category]! - amount; // Negate the amount
-              } else {
-                dataMap[category] = -amount; // Set as expense
-              }
-            }
-          } else {
-            dataMap[category] = amount;
-          }
-        });    
-      }
     }
   }
+  
+  
+
+  setState(() {
+    // Update the main dataMap for the pie chart with the aggregated data from tempDataMap
+    dataMap.clear();
+    dataMap.addAll(tempDataMap);
+
+    // This ensures the UI updates with the correct values for both the transactions list and the pie chart
+  });
+}
 
   Color _getColorForCategory(String category) {
     switch (category) {
@@ -269,16 +412,25 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
+  Widget _buildPieChart() {
+  if (dataMap.isNotEmpty) {
+    return MyPieChart(dataMap: dataMap);
+  } else {
+    // This text is shown while dataMap is empty, consider replacing it with a loading indicator if loadData is asynchronous
+    return Text('Loading chart data...', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white,));
+  }
+}
+
   @override
   Widget build(BuildContext context) {
-    if(count == 0)
+    if(totalCount == 0)
     {
       widget.storage.readTotal().then((double temp) {
         setState(() {
-          count = temp;
+          totalCount = temp;
         });
       });
-      loadData();
+      
     }
     return Scaffold(
       backgroundColor: Colors.white,
@@ -331,37 +483,44 @@ class _MyAppState extends State<MyApp> {
                 padding: const EdgeInsets.all(10),
                 transformAlignment: Alignment.centerLeft,
                 child: Text(
-                  'Trenutno stanje\n$count€',
+                  'Trenutno stanje\n$totalCount${widget.currency}',
                   style: const TextStyle(fontSize: 30, color: Colors.white),
                 ),
               ),
 
               Expanded(
                 child: ListView.builder(
-                  itemCount: expenses.length,
-                  itemBuilder: (context, index) {
-                    final expense = expenses[index];
-                    return Card(
-                      elevation: 15,
-                      color: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      margin: const EdgeInsets.all(15),
-                      child: ListTile(
-                        title: Text(
-                          expense.category,
-                          style: const TextStyle(color: Colors.black),
-                        ),
-                        subtitle: Text(
-                          '${expense.amount}€',
-                          style: const TextStyle(color: Colors.black),
-                        ),
-                        trailing: Text(
-                          '${expense.date.day}. ${expense.date.month}. ${expense.date.year}.',
-                          style: const TextStyle(color: Colors.black),
-                        ),
-                      ),
+    itemCount: transactions.length,
+    itemBuilder: (context, index) {
+      final transaction = transactions[index];
+      return Card(
+        elevation: 15,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        margin: const EdgeInsets.all(15),
+        child: ListTile(
+    title: Text(transaction.category),
+    // Update subtitle to display amount and date
+    subtitle: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('${transaction.amount}${widget.currency}'),
+        // Format the date as you like, here is a simple example
+        Text(DateFormat('dd-MM-yyyy').format(transaction.date)),
+      ],
+    ),
+    trailing: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          icon: Icon(Icons.delete),
+          onPressed: () => deleteTransaction(transactions[index].id),
+        ),
+    ],
+  ),
+)
                     );
                   },
                 ),
@@ -414,31 +573,45 @@ class _MyAppState extends State<MyApp> {
               end: Alignment.bottomRight,
             ),
           ),
-          child: Center(
-            child: MyPieChart(dataMap: dataMap),
-          ),
-        ),
+            child: Center(
+    // Check if dataMap is not empty to display the PieChart
+    child: Center(
+    child: _buildPieChart(), // Call the method here
+  ),
+),
+),
         
         
       ][currentPageIndex],
-
-      floatingActionButton: FloatingActionButton(
-        child: const Icon(Icons.add),
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => AddMoney(updateCount: updateCount),
+    floatingActionButton: Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        FloatingActionButton(
+          child: const Icon(Icons.add),
+           onPressed: () {
+            Navigator.push(
+              context,
+                MaterialPageRoute(
+                builder: (context) => AddMoney(
+                updateCount: updateCount,
+                dropdownMenuEntries: dataMap.keys.toList(),
+              ),
             ),
           );
         },
       ),
-      bottomNavigationBar: NavigationBar(
-        onDestinationSelected: (int index) {
-          setState(() {
-            currentPageIndex = index;
-          });
-        },
+         
+          
+        
+      ],
+    ),
+    bottomNavigationBar: NavigationBar(
+      onDestinationSelected: (int index) {
+        setState(() {
+          currentPageIndex = index;
+        });
+      },
         indicatorColor: Colors.deepPurple[85],
         selectedIndex: currentPageIndex,
         destinations: const <Widget>[
@@ -462,6 +635,212 @@ class _MyAppState extends State<MyApp> {
     );
   }
 }
+
+
+
+class StartAmountScreen extends StatefulWidget {
+  @override
+  _StartAmountScreenState createState() => _StartAmountScreenState();
+}
+
+class _StartAmountScreenState extends State<StartAmountScreen> {
+  final TextEditingController _controller = TextEditingController();
+  String _selectedCurrency = '€'; // Default currency
+
+  @override
+  Widget build(BuildContext context) {
+    List<String> currencies = ['€', '\$', '£', '¥', '₹', '₽']; // Add more currencies if needed
+
+    return Scaffold(
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(80), // Adjust the height as needed
+        child: AppBar(
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xfffc2759), Colors.purple, Colors.blue],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                child: Text(
+                  'Start Amount',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          elevation: 0,
+        ),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            
+            TextField(
+              controller: _controller,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: 'Enter Starting Amount',
+                border: OutlineInputBorder(), // Add border to text field
+                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12), // Adjust padding
+              ),
+            ),
+            SizedBox(height: 20),
+            DropdownButtonFormField<String>(
+              value: _selectedCurrency,
+              items: currencies.map((String currency) {
+                return DropdownMenuItem<String>(
+                  value: currency,
+                  child: Text(currency),
+                );
+              }).toList(),
+              onChanged: (String? newValue) {
+                setState(() {
+                  _selectedCurrency = newValue!;
+                });
+              },
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                double startingAmount = double.parse(_controller.text);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => MyApp(startingAmount: startingAmount, currency: _selectedCurrency, storage: CounterStorage()),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                padding: EdgeInsets.symmetric(horizontal: 40, vertical: 16), // Adjust button padding
+                primary: Color.fromARGB(255, 214, 122, 179),
+                onPrimary: Colors.black,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+              ),
+              child: Text(
+                'Continue',
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class WelcomeScreen extends StatelessWidget {
+  Future<void> _checkIfWelcomeScreenSeen(BuildContext context) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    bool welcomeScreenSeen = prefs.getBool('welcomeScreenSeen') ?? false;
+    if (welcomeScreenSeen) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => StartAmountScreen()),
+      );
+    } else {
+      await prefs.setBool('welcomeScreenSeen', true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _checkIfWelcomeScreenSeen(context);
+    return Scaffold(
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(80), // Adjust the height as needed
+        child: AppBar(
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xfffc2759), Colors.purple, Colors.blue],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                child: Text(
+                  'Dobrodošli!',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          elevation: 0,
+        ),
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.asset(
+              'assets/card.png', // Replace with your image path
+              height: 200, // Adjust the height as needed
+            ),
+            SizedBox(height: 20),
+            Padding(
+              padding: EdgeInsets.all(20.0),
+              child: Text(
+                'Money Pal - Upravljaj svojim financijama s lakoćom!',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                  color: Color.fromARGB(255, 168, 94, 156),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            SizedBox(height: 40),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => StartAmountScreen()),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                padding: EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+                primary: Color.fromARGB(255, 214, 122, 179),
+                onPrimary: const Color.fromARGB(255, 0, 0, 0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+              ),
+              child: Text(
+                'Dalje',
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+
+
 
 
 class MyPieChart extends StatelessWidget {
@@ -547,141 +926,141 @@ class ExpenseWidget extends StatelessWidget {
 }
 
 class AddMoney extends StatefulWidget {
-  final Function(double, String, DateTime) updateCount;
+  final Function(double, String, DateTime, bool) updateCount;
+  final List<String> dropdownMenuEntries;
 
-  const AddMoney({super.key, required this.updateCount});
+  const AddMoney({Key? key, required this.updateCount, required this.dropdownMenuEntries}) : super(key: key);
 
   @override
-  State<AddMoney> createState() => _AddMoneyState();
+  _AddMoneyState createState() => _AddMoneyState();
 }
 
 class _AddMoneyState extends State<AddMoney> {
   TextEditingController controller = TextEditingController();
-  String selectedCategory = '';
-  DateTime? selectedDate;
+  String selectedCategory = 'Namirnice';
+  DateTime selectedDate = DateTime.now();
   bool isExpense = true;
 
-  void _selectDate(BuildContext context) async {
-    final DateTime? pickedDate = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(1900),
-      lastDate: DateTime(2201),
-    );
+  void _showAddCategoryDialog() {
+    TextEditingController categoryController = TextEditingController();
 
-    if (pickedDate != null && pickedDate != selectedDate) {
-      setState(() {
-        selectedDate = pickedDate;
-      });
-    }
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Nova kategorija'),
+          content: TextField(
+            controller: categoryController,
+            decoration: InputDecoration(hintText: "Ime kategorije"),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: Text('Dodaj'),
+              onPressed: () {
+                String newCategory = categoryController.text;
+                if (newCategory.isNotEmpty) {
+                  setState(() {
+                    widget.dropdownMenuEntries.add(newCategory); // Assuming you have a method to update the categories list
+                    selectedCategory = newCategory; // Optionally set the new category as the selected one
+                  });
+                  Navigator.of(context).pop(); // Close the dialog
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xffff023d), Color(0xFFD500F9), Color(0xFF1A237E)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
-        title: const Text(
-          'Dodaj iznos',
-          style: TextStyle(color: Colors.white),
-        ),
+        title: Text('Nova transakcija'),
       ),
-      body: ListView(
-        children: [
-          MyCustomForm(controller: controller),
-          Center(
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Izaberite datum:',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  ElevatedButton(
-                    onPressed: () => _selectDate(context),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:Colors.grey, 
-                    ),
-                    child: Text(
-                      selectedDate != null
-                          ? "${selectedDate!.day}. ${selectedDate!.month}. ${selectedDate!.year}"
-                          : 'Izaberite datum',
-                    ),
-                  ),
-                ],
-              ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: 'Količina'),
             ),
-          ),
-          Center(
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                border: Border.all(color:Colors.grey),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: DropdownMenu(
-                onSelected: (value) {
-                  if (value != null) {
-                    setState(() {
-                      selectedCategory = value.data ?? '';
-                    });
-                  }
-                },
-                dropdownMenuEntries: const <DropdownMenuEntry<Text>>[
-                  DropdownMenuEntry(value: Text('Namirnice'), label: 'Namirnice'),
-                  DropdownMenuEntry(value: Text('Vozilo'), label: 'Vozilo'),
-                  DropdownMenuEntry(value: Text('Struja'), label: 'Struja'),
-                  DropdownMenuEntry(value: Text('Internet'), label: 'Internet'),
-                  DropdownMenuEntry(value: Text('Posao'), label: 'Posao'),
-                ],
-              ),
-            ),
-          ),
-          ListTile(
-            title: const Text('Izaberi tip:'),
-            trailing: Switch(
-              value: isExpense,
+            SizedBox(height: 50),
+            DropdownButtonFormField<String>(
+              value: selectedCategory,
               onChanged: (value) {
                 setState(() {
-                  isExpense = value;
+                  selectedCategory = value!;
                 });
               },
+              items: widget.dropdownMenuEntries.map<DropdownMenuItem<String>>((String value) {
+                return DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(value),
+                );
+              }).toList(),
             ),
-            subtitle: isExpense ? const Text('Prihod') : const Text('Trošak'),
-          ),
-        ],
+            SizedBox(height: 20),
+            ListTile(
+              title: Text('Datum: ${selectedDate.day}. ${selectedDate.month}. ${selectedDate.year}'),
+              trailing: Icon(Icons.calendar_today),
+              onTap: () async {
+                final pickedDate = await showDatePicker(
+                  context: context,
+                  initialDate: selectedDate,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime(2101),
+                );
+                if (pickedDate != null) {
+                  setState(() {
+                    selectedDate = pickedDate;
+                  });
+                }
+              },
+            ),
+            SizedBox(height: 20),
+            ListTile(
+              title: const Text('Kategorija:'),
+              trailing: Switch(
+                value: isExpense,
+                onChanged: (value) {
+                  setState(() {
+                    isExpense = value;
+                  });
+                },
+              ),
+              subtitle: isExpense ? const Text('Trošak') : const Text('Prihod'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                _showAddCategoryDialog();
+              },
+              child: Text('Add New Category'),
+            ),
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         child: const Icon(Icons.arrow_forward_ios_rounded),
         onPressed: () {
-          Navigator.pop(context);
           if (controller.text.isNotEmpty) {
-            final newCount = double.parse(controller.text);
-            // Determine the sign of the amount based on the selected option
-            final signedAmount = isExpense ? -newCount : newCount;
-            widget.updateCount(signedAmount, selectedCategory, selectedDate!);
+            final double newCount = double.tryParse(controller.text) ?? 0;
+            if (newCount != 0) {
+              widget.updateCount(newCount, selectedCategory, selectedDate, isExpense);
+              Navigator.pop(context);
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Please enter a valid number')),
+              );
+            }
           }
         },
       ),
     );
-    
   }
 }
 
@@ -711,6 +1090,51 @@ class MyCustomForm extends StatelessWidget {
     );
   }
 }
+
+
+class AddCategory extends StatelessWidget {
+  final Function(String) addCategory;
+
+  const AddCategory({Key? key, required this.addCategory}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    String newCategory = '';
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Nova kategorija'),
+      ),
+      body: Container(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          children: [
+            TextField(
+              onChanged: (value) {
+                newCategory = value;
+              },
+              decoration: const InputDecoration(
+                labelText: 'Upiši ime nove kategorije',
+              ),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                if (newCategory.isNotEmpty) {
+                  addCategory(newCategory);
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('Dodaj'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
 
 class MonthlyView extends StatelessWidget {
   final List<NeatCleanCalendarEvent> calendarEvents;
@@ -767,4 +1191,3 @@ class MonthlyView extends StatelessWidget {
     );
   }
 }
-
