@@ -31,13 +31,15 @@ class CounterStorage {
   void setState(Null Function() param0) {}
 
 
-  Future<void> deleteTransaction(String id) async {
-  String folderPath = await createFolder();
-  File file = File('$folderPath/Tra$id.txt');
-  if (await file.exists()) {
-    await file.delete();
+  Future<void> deleteTransaction(int number) async {
+    String folderPath = await createFolder();
+    print('Now the bitch is in the Storage. TraNum: $number');
+    File file = File('$folderPath/Tra$number.txt');
+    if (await file.exists()) {
+      print('in the if');
+      await file.delete();
+    }
   }
-}
   Future<String> createFolder() async {
     // Get the documents directory using path_provider
     Directory documentsDirectory = await getApplicationDocumentsDirectory();
@@ -135,10 +137,10 @@ Future<File> _createTrackerFile() async {
     }
   }
 
-  Future<File> writeCounter(double newCount, String category, DateTime date, String id) async {
+  Future<File> writeCounter(double newCount, String category, DateTime date, int number) async {
     final file = await _localFile;
     writeFileNum();
-    return file.writeAsString('$newCount\n$category\n$date\n$id');
+    return file.writeAsString('$newCount\n$category\n$date\n$number');
   }
 
   Future<File> writeTotal(double count) async {
@@ -158,12 +160,12 @@ Future<File> _createTrackerFile() async {
 }
 
 class Expense {
-  final String id;
+  final int number;
   final String category;
   final double amount;
   final DateTime date;
 
-  Expense(this.id, this.category, this.amount, this.date);
+  Expense(this.number, this.category, this.amount, this.date);
 }
 
 class MyApp extends StatefulWidget {
@@ -178,6 +180,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   double totalCount = 0;
+  int number = 0;
 
   bool isDarkModeEnabled = false; // Track dark mode state
 
@@ -190,11 +193,11 @@ class _MyAppState extends State<MyApp> {
   List<NeatCleanCalendarEvent> calendarEvents = [];
 
   List<DropdownMenuItem<String>> dropdownMenuEntries = [
-    DropdownMenuItem(value: 'Namirnice', child: Text('Namirnice')),
-    DropdownMenuItem(value: 'Vozilo', child: Text('Vozilo')),
-    DropdownMenuItem(value: 'Struja', child: Text('Struja')),
-    DropdownMenuItem(value: 'Internet', child: Text('Internet')),
-    DropdownMenuItem(value: 'Posao', child: Text('Posao')),
+    const DropdownMenuItem(value: 'Namirnice', child: Text('Namirnice')),
+    const DropdownMenuItem(value: 'Vozilo', child: Text('Vozilo')),
+    const DropdownMenuItem(value: 'Struja', child: Text('Struja')),
+    const DropdownMenuItem(value: 'Internet', child: Text('Internet')),
+    const DropdownMenuItem(value: 'Posao', child: Text('Posao')),
   ];
   
 
@@ -226,22 +229,24 @@ class _MyAppState extends State<MyApp> {
     loadData();
   }
 
-  void updateCount(double newCount, String category, DateTime date, bool isExpense) async {
-  final signedAmount = isExpense ? -newCount : newCount; // Ensure correct sign
-  String id = DateTime.now().millisecondsSinceEpoch.toString();
-
-
-  // Perform file operations before calling setState
-  await widget.storage.writeTotal(totalCount + signedAmount);
-  await widget.storage.writeCounter(signedAmount, category, date, id);
-
+  void updateCount(double newCount, String category, DateTime date, bool isExpense) async {  
   setState(() {
+    final signedAmount = isExpense ? -newCount : newCount;
     totalCount += signedAmount;
-    transactions.add(Expense(id,category, signedAmount, date));
-        
+    widget.storage.writeTotal(totalCount);
+    widget.storage.writeCounter(signedAmount, category, date, number);
+    transactions.add(Expense(number, category, signedAmount, date));
+    number++;
     // Update dataMap for pie chart
     if (dataMap.containsKey(category)) {
-      dataMap[category] = (dataMap[category] ?? 0) + signedAmount;
+      if (signedAmount < 0) {
+        // Only update dataMap for expenses (negative amounts)
+        if (dataMap[category] != null) {
+          dataMap[category] = dataMap[category]! - signedAmount; // Negate the amount
+        } else {
+          dataMap[category] = -signedAmount; // Set as expense
+        }
+      }
     } else {
       dataMap[category] = signedAmount;
     }
@@ -257,17 +262,19 @@ class _MyAppState extends State<MyApp> {
   });
 }
 
-void deleteTransaction(String id) async {
-  int index = transactions.indexWhere((transaction) => transaction.id == id);
+void deleteTransaction(int number) async {
+  print('The number is $number');
+  int index = transactions.indexWhere((transaction) => transaction.number == number);
   if (index != -1) {
     Expense transactionToDelete = transactions[index];
+    print('This bitch right here ${transactionToDelete.amount}');
 
     // Adjust the totalCount and update the total amount file
     totalCount -= transactionToDelete.amount;
     await widget.storage.writeTotal(totalCount);
-
+  print('the bitch is in deleteTransaction $number');
     // Remove the transaction from the local storage
-    await widget.storage.deleteTransaction(id);
+    await widget.storage.deleteTransaction(number);
 
     // Remove the transaction from the list
     transactions.removeAt(index);
@@ -333,22 +340,15 @@ void rebuildCalendarEvents() {
     }
   }
 
-   
+  Future<void> loadData() async {
+    int fileNum = await widget.storage.readCounter();
+    // Initialize variables outside the loop to ensure they are not late-initialized
+    double amount;
+    String category;
+    DateTime date;
 
-
- 
-  
-
-  
-   Future<void> loadData() async {
-  int fileNum = await widget.storage.readCounter();
-  // Initialize variables outside the loop to ensure they are not late-initialized
-  double amount;
-  String category;
-  DateTime date;
-
-  // Temporary storage to update the pie chart dataMap correctly
-  Map<String, double> tempDataMap = {
+    // Temporary storage to update the pie chart dataMap correctly
+   Map<String, double> tempDataMap = {
     'Namirnice': 0,
     'Vozilo': 0,
     'Struja': 0,
@@ -363,10 +363,10 @@ void rebuildCalendarEvents() {
       amount = double.parse(lines[0]);
       category = lines[1];
       date = DateTime.parse(lines[2]);
-      String id = lines[3];
+      number = int.parse(lines[3]);
 
       // Add transaction to the transactions list
-      transactions.add(Expense(id, category, amount, date));
+      transactions.add(Expense(number, category, amount, date));
       
       // Only consider negative amounts for expenses in dataMap
       if (amount < 0) {
@@ -429,8 +429,7 @@ void rebuildCalendarEvents() {
         setState(() {
           totalCount = temp;
         });
-      });
-      
+      });  
     }
     return Scaffold(
       backgroundColor: Colors.white,
@@ -516,7 +515,7 @@ void rebuildCalendarEvents() {
       children: [
         IconButton(
           icon: Icon(Icons.delete),
-          onPressed: () => deleteTransaction(transactions[index].id),
+          onPressed: () => deleteTransaction(transactions[index].number),
         ),
     ],
   ),
@@ -600,11 +599,7 @@ void rebuildCalendarEvents() {
             ),
           );
         },
-      ),
-         
-          
-        
-      ],
+      )],
     ),
     bottomNavigationBar: NavigationBar(
       onDestinationSelected: (int index) {
