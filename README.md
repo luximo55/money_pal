@@ -1,16 +1,13 @@
 # money_pal
+money_pal is a finance management app for Android, that won 2nd place in the software development county competition of Sisačko-moslavačka županija.
 
-A new Flutter project.
+# Purpose
+The purpose of our app is to help people manage their finances by displaying their spending in various ways
 
-## Getting Started
+# Team
+The money_pal team is:
+Marin Bogdanović
+Klara Kuzmić
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+# Development
+money_pal is made using the Flutter framework with the Dart programming language, including the frontend.
